@@ -29,25 +29,25 @@ type Recorder struct {
 
 func NewRecorder(filename string) (*Recorder, error) {
 	if err := portaudio.Initialize(); err != nil {
-		return nil, fmt.Errorf("failed to initialize the PortAudio recorder: ", err)
+		return nil, fmt.Errorf("failed to initialize the PortAudio recorder: %w", err)
 	}
 
 	file, err := os.Create(filename)
 	if err != nil {
 		portaudio.Terminate()
-		return nil, fmt.Errorf("Failed to create the audio file :", err)
+		return nil, fmt.Errorf("failed to create the audio file : %w", err)
 	}
 
 	// empty WAV(Waveform audio file format)
 	if err := writeWAVHeader(file); err != nil {
 		file.Close()
 		portaudio.Terminate()
-		return nil, fmt.Errorf("failed to write WAV Header: ", err)
+		return nil, fmt.Errorf("failed to write WAV Header: %w", err)
 	}
 
 	// create Audio stream
 	rec := &Recorder{file: file}
-	buffer := make([]int16, BufferSize)
+	// buffer := make([]int16, BufferSize)
 
 	// open stream for recording
 	stream, err := portaudio.OpenDefaultStream(1, 0, SampleRate, BufferSize, func(in []int16) {
@@ -59,7 +59,7 @@ func NewRecorder(filename string) (*Recorder, error) {
 	if err != nil {
 		file.Close()
 		portaudio.Terminate()
-		return nil, fmt.Errorf("failed to open audio stream: ", err)
+		return nil, fmt.Errorf("failed to open audio stream: %w", err)
 
 	}
 	rec.stream = stream
