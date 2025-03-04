@@ -57,3 +57,24 @@ func NewSpectogramGenerator(filepath string) (*Spectogram, error) {
 	return &Spectogram{filepath, floatData, int(decoder.SampleRate)}, nil
 
 }
+
+// ComputeSpectogram performs SFTF and returns 2-D matrix of (time v/s frequency)
+
+func (s *Spectogram) ComputeSpectogram() [][]float64 {
+	numFrames := (len(s.data) - WindowSize) / Overlap
+	spectoGram := make([][]float64, numFrames)
+
+	// hann window to manage spectra leakage
+	hannWindow := applyHannWindow(WindowSize)
+
+	// outer loop for each audio frame of data
+	for i := 0; i < numFrames; i++ {
+		start := i * Overlap
+		windowedData := make([]float64, WindowSize)
+
+		//apply hann window
+		for j := 0; j < WindowSize; j++ {
+			windowedData[j] = s.data[start+j] * han
+		}
+	}
+}
