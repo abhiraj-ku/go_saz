@@ -2,9 +2,15 @@ package audio
 
 import (
 	"fmt"
+	"image/color"
+	"image/png"
+	"math"
 	"os"
 
+	"image"
+
 	"github.com/go-audio/wav"
+	"github.com/mjibson/go-dsp/fft"
 )
 
 // Spectogram specifications (consts)
@@ -15,7 +21,7 @@ const (
 )
 
 // Spectogram struct
-type Spectogram struct {
+type SpectogramGenrator struct {
 	filepath   string
 	data       []float64
 	sampleRate int
@@ -23,7 +29,7 @@ type Spectogram struct {
 
 // NewSpectogram initializes the Spectogram and reads wav file data
 
-func NewSpectogramGenerator(filepath string) (*Spectogram, error) {
+func NewSpectogramGenerator(filepath string) (*SpectogramGenrator, error) {
 	// Open the WAV file and read PCM data (among the 44 bits of tha audio data)
 	file, err := os.Open(filepath)
 	if err != nil {
@@ -54,13 +60,13 @@ func NewSpectogramGenerator(filepath string) (*Spectogram, error) {
 		floatData[i] = float64(sample) / float64(1<<15)
 	}
 
-	return &Spectogram{filepath, floatData, int(decoder.SampleRate)}, nil
+	return &SpectogramGenrator{filepath, floatData, int(decoder.SampleRate)}, nil
 
 }
 
 // ComputeSpectogram performs SFTF and returns 2-D matrix of (time v/s frequency)
 
-func (s *Spectogram) ComputeSpectogram() [][]float64 {
+func (s *SpectogramGenrator) ComputeSpectogram() [][]float64 {
 	numFrames := (len(s.data) - WindowSize) / Overlap
 	spectoGram := make([][]float64, numFrames)
 
@@ -74,7 +80,69 @@ func (s *Spectogram) ComputeSpectogram() [][]float64 {
 
 		//apply hann window
 		for j := 0; j < WindowSize; j++ {
-			windowedData[j] = s.data[start+j] * han
+			windowedData[j] = s.data[start+j] * hannWindow[j]
+		}
+
+		// compute FTT for each window
+		fftResult := fft.FFTReal(windowedData)
+
+		//compute magnittude spectrum
+		magnitudes := make([]float64, FrequencyBins)
+		for j := 0; j < FrequencyBins; j++ {
+			magnitudes[j] = cmplxAbs(fftResult[j])
+		}
+		spectoGram[i] = magnitudes
+	}
+	return spectoGram
+}
+
+// Generate spectogram as PNG and save it
+func (s *SpectogramGenrator) SaveSpectrogramImage(spectogram [][]float64, outputPath string) error {
+	height := len(spectogram[0]) //FrequencyBins
+	width := len(spectogram)
+
+	img := image.NewGray(image.Rect(0, 0, width, height))
+
+	maxVal := 0.0
+	for _, row := range spectogram {
+		for _, val := range row {
+			if val > maxVal {
+				maxVal = val
+			}
 		}
 	}
+	if maxVal == 0 {
+		return fmt.Errorf("spectogram has only zero values, unable to normalize: ")
+	}
+	// Normalize values for visualization
+	for x := 0; x < width; x++ {
+		for y := 0; y < height; y++ {
+			intensity := uint8((spectogram[x][height-y-1] / maxVal) * 255)
+			img.SetGray(x, y, color.Gray{Y: intensity})
+		}
+	}
+
+	// save the image to outputPath
+	file, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("unable to save spectrum image: %w", err)
+	}
+	defer file.Close()
+	return png.Encode(file, img)
+
+}
+
+// applyHannWindow generates a hann window function
+
+func applyHannWindow(size int) []float64 {
+	window := make([]float64, size)
+	for i := range window {
+		window[i] = 0.5 * (1 - math.Cos(2*math.Pi*float64(i)/float64(size-1)))
+	}
+	return window
+}
+
+// cmplxAbs compuytes mag of a complex number
+func cmplxAbs(c complex128) float64 {
+	return math.Sqrt(real(c)*real(c) + imag(c)*imag(c))
 }
